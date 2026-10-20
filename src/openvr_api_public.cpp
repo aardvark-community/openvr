@@ -2,17 +2,35 @@
 #define VR_API_EXPORT 1
 #include "openvr.h"
 #include "ivrclientcore.h"
-#include "pathtools_public.h"
-#include "sharedlibtools_public.h"
-#include "envvartools_public.h"
+#include <vrcore/pathtools_public.h>
+#include <vrcore/sharedlibtools_public.h>
+#include <vrcore/envvartools_public.h>
 #include "hmderrors_public.h"
-#include "vrpathregistry_public.h"
+#include <vrcore/strtools_public.h>
+#include <vrcore/vrpathregistry_public.h>
 #include <mutex>
 
 using vr::EVRInitError;
 using vr::IVRSystem;
 using vr::IVRClientCore;
 using vr::VRInitError_None;
+
+// figure out how to import from the VR API dll
+#if defined(_WIN32)
+
+#if !defined(OPENVR_BUILD_STATIC)
+#define VR_EXPORT_INTERFACE extern "C" __declspec( dllexport )
+#else
+#define VR_EXPORT_INTERFACE extern "C"
+#endif
+
+#elif defined(__GNUC__) || defined(COMPILER_GCC) || defined(__APPLE__)
+
+#define VR_EXPORT_INTERFACE extern "C" __attribute__((visibility("default")))
+
+#else
+#error "Unsupported Platform."
+#endif
 
 namespace vr
 {
@@ -70,21 +88,22 @@ uint32_t VR_InitInternal( EVRInitError *peError, vr::EVRApplicationType eApplica
 void VR_ShutdownInternal()
 {
 	std::lock_guard<std::recursive_mutex> lock( g_mutexSystem );
-	
+
+#if !defined( VR_API_PUBLIC )
+	CleanupInternalInterfaces();
+#endif
+
 	if ( g_pHmdSystem )
 	{
 		g_pHmdSystem->Cleanup();
 		g_pHmdSystem = NULL;
 	}
+
 	if ( g_pVRModule )
 	{
 		SharedLib_Unload( g_pVRModule );
 		g_pVRModule = NULL;
 	}
-
-#if !defined( VR_API_PUBLIC )
-	CleanupInternalInterfaces();
-#endif
 
 	++g_nVRToken;
 }
@@ -108,10 +127,10 @@ EVRInitError VR_LoadHmdSystemInternal()
 
 	// Because we don't have a way to select debug vs. release yet we'll just
 	// use debug if it's there
-#if defined( LINUX64 )
-	std::string sTestPath = Path_Join( sRuntimePath, "bin", PLATSUBDIR );
-#else
+#if defined( WIN32 ) || defined( LINUX32 )
 	std::string sTestPath = Path_Join( sRuntimePath, "bin" );
+#else
+	std::string sTestPath = Path_Join( sRuntimePath, "bin", PLATSUBDIR );
 #endif
 	if( !Path_IsDirectory( sTestPath ) )
 	{
@@ -238,27 +257,63 @@ bool VR_IsRuntimeInstalled()
 }
 
 
+// -------------------------------------------------------------------------------
+// Purpose: This is the old Runtime Path interface that is no longer exported in the
+//			latest header. We still want to export it from the DLL, though, so updating
+//			to a new DLL doesn't break old compiled code. This version was not thread 
+//			safe and could change the buffer pointer to by a previous result on a 
+//			subsequent call
+// -------------------------------------------------------------------------------
+VR_EXPORT_INTERFACE const char *VR_CALLTYPE VR_RuntimePath();
+
 /** Returns where OpenVR runtime is installed. */
 const char *VR_RuntimePath()
 {
-	// otherwise we need to do a bit more work
-	static std::string sRuntimePath;
-	std::string sConfigPath, sLogPath;
-
-	bool bReadPathRegistry = CVRPathRegistry_Public::GetPaths( &sRuntimePath, &sConfigPath, &sLogPath, NULL, NULL );
-	if ( !bReadPathRegistry )
+	static char rchBuffer[1024];
+	uint32_t unRequiredSize;
+	if ( VR_GetRuntimePath( rchBuffer, sizeof( rchBuffer ), &unRequiredSize ) && unRequiredSize < sizeof( rchBuffer ) )
+	{
+		return rchBuffer;
+	}
+	else
 	{
 		return nullptr;
+	}
+}
+
+
+/** Returns where OpenVR runtime is installed. */
+bool VR_GetRuntimePath( char *pchPathBuffer, uint32_t unBufferSize, uint32_t *punRequiredBufferSize )
+{
+	// otherwise we need to do a bit more work
+	std::string sRuntimePath;
+
+	*punRequiredBufferSize = 0;
+
+	bool bReadPathRegistry = CVRPathRegistry_Public::GetPaths( &sRuntimePath, nullptr, nullptr, nullptr, nullptr );
+	if ( !bReadPathRegistry )
+	{
+		return false;
 	}
 
 	// figure out where we're going to look for vrclient.dll
 	// see if the specified path actually exists.
 	if ( !Path_IsDirectory( sRuntimePath ) )
 	{
-		return nullptr;
+		return false;
 	}
 
-	return sRuntimePath.c_str();
+	*punRequiredBufferSize = (uint32_t)sRuntimePath.size() + 1;
+	if ( sRuntimePath.size() >= unBufferSize )
+	{
+		*pchPathBuffer = '\0';
+	}
+	else
+	{
+		strcpy_safe( pchPathBuffer, unBufferSize, sRuntimePath.c_str() );
+	}
+
+	return true;
 }
 
 
