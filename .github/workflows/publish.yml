@@ -1,0 +1,108 @@
+name: Publish
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - RELEASE_NOTES.md 
+      - .github/workflows/publish.yml
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  release-check:
+    name: Check for Release
+    runs-on: ubuntu-latest
+    outputs:
+      should-skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Dotnet
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore Tools
+        run: dotnet tool restore
+
+      - name: Check if release exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(dotnet aardpack --parse-only)
+          EXIT_CODE=$?
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Error: dotnet aardpack --parse-only failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "Error: dotnet aardpack --parse-only returned an empty string"
+            exit 1
+          fi
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION exists. Setting skip to true."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "Release $VERSION new. Setting skip to false."
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+  pack:
+    name: Package
+    runs-on: windows-latest
+    needs: release-check
+    if: needs.release-check.outputs.should-skip != 'true'
+    permissions:
+      id-token: write # enable GitHub OIDC token issuance for this job
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Dotnet
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore Tools
+        run: dotnet tool restore
+
+      - name: Restore
+        run: dotnet paket restore
+
+      - name: Pack
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet aardpack src\OpenVR.sln --notag
+
+      - name: Upload Packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: bin\pack
+
+      - name: GitHub Packages
+        env:
+          NUGET_KEY: ${{ secrets.GITHUB_TOKEN }}
+        shell: cmd
+        run: dotnet nuget push "bin\pack\*.nupkg" -k %NUGET_KEY% -s "https://nuget.pkg.github.com/aardvark-community/index.json" --skip-duplicate
+
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: NuGet
+        shell: cmd
+        run: dotnet nuget push "bin\pack\*.nupkg" -k ${{steps.login.outputs.NUGET_API_KEY}} -s "https://api.nuget.org/v3/index.json" --skip-duplicate

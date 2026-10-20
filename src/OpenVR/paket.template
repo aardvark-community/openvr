@@ -1,8 +1,8 @@
 type project
 id Unofficial.OpenVR
-authors krauthaufen
-owners krauthaufen
-projectUrl https://github.com/krauthaufen/openvr
+authors Aardvark Platform Team
+owners Aardvark Platform Team
+projectUrl https://github.com/aardvark-community/openvr
 description 
 	OpenVR bindings
 include-pdbs true

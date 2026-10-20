@@ -1,9 +1,12 @@
-framework: netstandard2.0
+framework: auto-detect
 source https://api.nuget.org/v3/index.json
+storage: none
 
-group Build
-framework: net45
-content: none
-source https://api.nuget.org/v3/index.json
+nuget Aardvark.Build                    ~> 2.0.7
+nuget FSharp.Core                       ~> 10.0.0
 
-github aardvark-platform/aardvark.fake:v4-temp
+nuget Aardvark.Base                     ~> 5.3.28
+
+nuget Expecto                           ~> 11.1.1
+nuget YoloDev.Expecto.TestSdk           ~> 0.16.1
+nuget Microsoft.NET.Test.Sdk            ~> 17.9.0

@@ -1,6 +1,7 @@
 /.fake
 /bin/Debug
 /bin/Release
+/bin/pack
 /.paket/paket.exe
 /packages
 /paket-files
@@ -10,3 +11,5 @@ obj/
 /bin/*.nupkg
 /src/.vs/OpenVR/v15/*.suo
 **/.vs/**
+**/.idea
+*.DotSettings.user
