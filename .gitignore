@@ -2,6 +2,7 @@
 /bin/Debug
 /bin/Release
 /bin/pack
+/lib/Native
 /.paket/paket.exe
 /packages
 /paket-files

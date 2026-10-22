@@ -15,7 +15,8 @@ module Tests =
             Aardvark.Init()
 
         let system =
-            Expect.isTrue (OpenVR.IsRuntimeInstalled()) "No OpenVR runtime installed"
+            if not <| OpenVR.IsRuntimeInstalled() then
+                skiptest "No OpenVR runtime installed"
 
             let mutable err = EVRInitError.None
             let sys = OpenVR.Init(&err, typ)

@@ -7,5 +7,17 @@
   <ItemGroup>
     <Compile Include="..\..\headers\openvr_api.cs" Link="openvr_api.cs" />
   </ItemGroup>
+  <Target Name="CopyWindowsLibrary" BeforeTargets="PackNativeDependencies">
+    <Copy
+      SourceFiles="$(ProjectDir)..\..\bin\win64\openvr_api.dll"
+      DestinationFolder="$(ProjectDir)..\..\lib\Native\OpenVR\windows\AMD64\"
+      SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyLinuxLibrary" BeforeTargets="PackNativeDependencies">
+    <Copy
+      SourceFiles="$(ProjectDir)..\..\bin\linux64\libopenvr_api.so"
+      DestinationFolder="$(ProjectDir)..\..\lib\Native\OpenVR\linux\AMD64\"
+      SkipUnchangedFiles="true" />
+  </Target>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
