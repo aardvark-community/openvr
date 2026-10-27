@@ -1,0 +1,57 @@
+name: Test
+on:
+  workflow_call:
+  push:
+    paths:
+      - 'src/**'
+      - 'paket.lock'
+      - 'global.json'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'paket.lock'
+      - 'global.json'
+      - '.github/workflows/test.yml'
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            sln: src/OpenVR.sln
+          - os: windows-latest
+            sln: src\OpenVR.sln
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        global-json-file: global.json
+
+    - name: Cache Paket
+      uses: actions/cache@v6
+      with:
+        path: |
+          ~/.nuget/packages
+          paket-files
+        key: ${{ runner.os }}-paket-${{ hashFiles('paket.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-paket-
+
+    - name: Restore Tools
+      run: dotnet tool restore
+
+    - name: Restore
+      run: dotnet paket restore
+
+    - name: Build
+      run: dotnet build -c Release -m:1 ${{ matrix.sln }}
+
+    - name: Test
+      run: dotnet test ${{ matrix.sln }} -c Release --no-build --nologo --logger:"console;verbosity=normal"
